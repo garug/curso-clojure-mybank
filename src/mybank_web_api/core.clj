@@ -46,6 +46,11 @@
      :body    {:id-conta   id-conta
                :novo-saldo (id-conta @contas)}}))
 
+(defn saldo-suficiente?
+  [conta valor]
+  (let [valor-atual (:saldo conta)]
+    (>= valor-atual valor)))
+
 (defn make-withdraw [request]
   (let [conta (:conta request)
         contas (:contas request)
@@ -54,12 +59,19 @@
         ;id-conta (-> request :conta :id) -- funcioa se o merge for feito
         ;conta (get @contas id-conta) ; toda vez que for necessário utilizar conta, terá esse código se o merge não for feito
         valor (:valor request)
-        SIDE-EFFECT! (swap! contas (fn [mapa] (update-in mapa [(:id conta) :saldo]  #(-> % (- valor) bigdec))))]
+        pode-sacar? (saldo-suficiente? conta valor)
+        operacao (fn [mapa] (update-in mapa [(:id conta) :saldo]  #(-> % (- valor) bigdec)))]
         ;SIDE-EFFECT! (swap! contas update-in [(:id conta) :saldo] - valor)]
-    {:status  200
-     :headers {"Content-Type" "text/plain"}
-     :body    {:id-conta   (:id conta)
-               :novo-saldo ((:id conta) @contas)}}))
+        (if pode-sacar?
+          (do
+            (swap! contas operacao)
+            {:status  200
+             :headers {"Content-Type" "text/plain"}
+             :body    {:id-conta   (:id conta)
+                       :novo-saldo ((:id conta) @contas)}})
+          {:status  400
+           :headers {"Content-Type" "text/plain"}
+           :body    {:erro   "saldo-insuficiente"}})))
 
 (def validate-conta-existe
   {:name  ::validate-conta-existe
