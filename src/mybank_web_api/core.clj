@@ -1,54 +1,22 @@
 (ns mybank-web-api.core
-  (:require [io.pedestal.http :as http]
-            [io.pedestal.http.route :as route]
-            [io.pedestal.test :as test-http]
-            [clojure.pprint :as pp])
+  (:require [mybank-web-api.routes :as r]
+            [mybank-web-api.database :as db]
+            [mybank-web-api.server :as web-server]
+            [com.stuartsierra.component :as component])
   (:gen-class))
 
-(defonce contas (atom {:1 {:saldo 100}
-                   :2 {:saldo 200}
-                   :3 {:saldo 300}}))
+(def new-sys
+  (component/system-map
+    :routes (r/new-routes)
+    :database (db/new-database)
+    :web-server (component/using
+                  (web-server/new-web-server)
+                  [:database :routes])))
 
-(defn get-saldo [request]
-  (let [id-conta (-> request :path-params :id keyword)]
-    {:status 200 :body {:saldo (id-conta @contas "conta inválida!")}}))
+(def sys (atom nil))
+(defn main [] (reset! sys (component/start new-sys)))
 
-(defn make-deposit [request]
-  (let [id-conta (-> request :path-params :id keyword)
-        valor-deposito (-> request :body slurp parse-double)
-        _ (swap! contas (fn [m] (update-in m [id-conta :saldo] #(+ % valor-deposito))))]
-    {:status 200 :body {:id-conta id-conta
-                        :novo-saldo (id-conta @contas)}}))
-
-(def routes
-  (route/expand-routes
-    #{["/saldo/:id" :get get-saldo :route-name :saldo]
-      ["/deposito/:id" :post make-deposit :route-name :deposito]}))
-
-(defn create-server []
-  (http/create-server
-    {::http/routes routes
-     ::http/type   :jetty
-     ::http/port   8890
-     ::http/join?  false}))
-
-(defonce server (atom nil))
-
-(defn start []
-  (reset! server (http/start (create-server))))
-
-(defn test-request [server verb url]
-  (test-http/response-for (::http/service-fn @server) verb url))
-(defn test-post [server verb url body]
-  (test-http/response-for (::http/service-fn @server) verb url :body body))
 (comment
-  (start)
-  (http/stop @server)
-
-  (test-request server :get "/saldo/1")
-  (test-request server :get "/saldo/2")
-  (test-request server :get "/saldo/3")
-  (test-request server :get "/saldo/4")
-
-  (test-post server :post "/deposito/2" "863.99")
+  (main)
 )
+
